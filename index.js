@@ -1,7 +1,8 @@
 const responseMap = new Map()
 
 const Discord = require('discord.js')
-const fetch = require('sync-fetch')
+const fetch = require('node-fetch')
+const dotenv = require('dotenv')
 
 const client = new Discord.Client()
 const HELP = `\`\`\`RustBot v0.1.0
@@ -15,7 +16,7 @@ COMMANDS:
     ?play - execute code and send stdout/stderr (equivalent to local run)
 \`\`\``
 
-function queryPlayground(messageString) {
+async function queryPlayground(messageString) {
 	const data = {
 		channel: 'stable',
 		mode: 'debug',
@@ -27,13 +28,13 @@ function queryPlayground(messageString) {
 	}
 	const url = 'https://play.integer32.com/execute'
 
-	const res = fetch(url, {
+	const res = await fetch(url, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
 		},
 		body: JSON.stringify(data),
-	}).json()
+	}).then((res) => res.json())
 
 	const codeWrap = (text) => `\`\`\`${text}\`\`\``
 
@@ -41,7 +42,7 @@ function queryPlayground(messageString) {
 	return codeWrap(res.stderr)
 }
 
-function extractMessageOutput(match) {
+async function extractMessageOutput(match) {
 	let messageString = ''
 	switch (match[1]) {
 		case 'eval':
@@ -51,7 +52,7 @@ function extractMessageOutput(match) {
 			messageString = match[2]
 	}
 
-	const res = queryPlayground(messageString)
+	const res = await queryPlayground(messageString)
 	if (res.length <= 500) return res
 	return 'response too long, manually evaluate!'
 }
@@ -74,7 +75,7 @@ client.on('messageUpdate', async (oldMsg, newMsg) => {
 		if (!match.valid) return
 
 		const sent = await correspondingMessage.edit('loading...')
-		const output = extractMessageOutput(match.body)
+		const output = await extractMessageOutput(match.body)
 
 		await sent.edit(output)
 	}
@@ -90,7 +91,7 @@ client.on('message', async (msg) => {
 	if (!match.valid) return
 
 	const sent = await msg.channel.send('loading...')
-	const output = extractMessageOutput(match.body)
+	const output = await extractMessageOutput(match.body)
 
 	if (output) {
 		await sent.edit(output)
@@ -98,4 +99,5 @@ client.on('message', async (msg) => {
 	}
 })
 
-client.login('TOKEN')
+dotenv.config()
+client.login(process.env.TOKEN)

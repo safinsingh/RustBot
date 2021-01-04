@@ -1,15 +1,15 @@
 {
-  "name": "rrun",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "safinsingh",
-  "license": "ISC",
-  "dependencies": {
-    "discord.js": "^12.5.1",
-    "sync-fetch": "^0.3.0"
-  }
+	"name": "rustbot",
+	"version": "1.0.0",
+	"main": "index.js",
+	"scripts": {
+		"start": "node index.js"
+	},
+	"author": "safinsingh",
+	"license": "AGPL-3.0",
+	"dependencies": {
+		"discord.js": "^12.5.1",
+		"dotenv": "^8.2.0",
+		"node-fetch": "^2.6.1"
+	}
 }
