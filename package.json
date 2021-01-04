@@ -3,13 +3,17 @@
 	"version": "1.0.0",
 	"main": "index.js",
 	"scripts": {
-		"start": "node index.js"
+		"start": "ts-node index.ts"
 	},
 	"author": "safinsingh",
 	"license": "AGPL-3.0",
 	"dependencies": {
 		"discord.js": "^12.5.1",
 		"dotenv": "^8.2.0",
-		"node-fetch": "^2.6.1"
+		"node-fetch": "^2.6.1",
+		"ts-node": "^9.1.1"
+	},
+	"devDependencies": {
+		"@types/node-fetch": "^2.5.7"
 	}
 }

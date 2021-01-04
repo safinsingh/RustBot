@@ -1,8 +1,8 @@
-const responseMap = new Map()
+import Discord from 'discord.js'
+import dotenv from 'dotenv'
+import fetch from 'node-fetch'
 
-const Discord = require('discord.js')
-const fetch = require('node-fetch')
-const dotenv = require('dotenv')
+const responseMap = new Map()
 
 const client = new Discord.Client()
 const HELP = `\`\`\`RustBot v0.1.0
@@ -16,7 +16,7 @@ COMMANDS:
     ?play - execute code and send stdout/stderr (equivalent to local run)
 \`\`\``
 
-async function queryPlayground(messageString) {
+async function queryPlayground(messageString: string) {
 	const data = {
 		channel: 'stable',
 		mode: 'debug',
@@ -36,13 +36,13 @@ async function queryPlayground(messageString) {
 		body: JSON.stringify(data),
 	}).then((res) => res.json())
 
-	const codeWrap = (text) => `\`\`\`${text}\`\`\``
+	const codeWrap = (text: string) => `\`\`\`${text}\`\`\``
 
 	if (res.success) return codeWrap(res.stdout)
 	return codeWrap(res.stderr)
 }
 
-async function extractMessageOutput(match) {
+async function extractMessageOutput(match: RegExpMatchArray) {
 	let messageString = ''
 	switch (match[1]) {
 		case 'eval':
@@ -57,7 +57,7 @@ async function extractMessageOutput(match) {
 	return 'response too long, manually evaluate!'
 }
 
-function messageValid(content) {
+function messageValid(content: string) {
 	const EVAL_REGEX = new RegExp('\\?(eval|play)\\s+```rust\\n([\\s\\S]*?)\\n+```')
 
 	if (!EVAL_REGEX.test(content)) return { valid: false }
@@ -65,17 +65,17 @@ function messageValid(content) {
 }
 
 client.on('ready', () => {
-	console.log(`Logged in as ${client.user.tag}!`)
+	console.log(`Logged in as ${client.user?.tag}!`)
 })
 
 client.on('messageUpdate', async (oldMsg, newMsg) => {
 	const correspondingMessage = responseMap.get(oldMsg.id)
 	if (correspondingMessage) {
-		const match = messageValid(newMsg.content)
+		const match = messageValid(newMsg.content ?? '')
 		if (!match.valid) return
 
 		const sent = await correspondingMessage.edit('loading...')
-		const output = await extractMessageOutput(match.body)
+		const output = await extractMessageOutput(match.body ?? [])
 
 		await sent.edit(output)
 	}
@@ -91,7 +91,7 @@ client.on('message', async (msg) => {
 	if (!match.valid) return
 
 	const sent = await msg.channel.send('loading...')
-	const output = await extractMessageOutput(match.body)
+	const output = await extractMessageOutput(match.body ?? [])
 
 	if (output) {
 		await sent.edit(output)
