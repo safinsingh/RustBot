@@ -56,10 +56,10 @@ fn message_valid<'a>(content: &'a str) -> ValidResponse<'a> {
 	}
 
 	let matches = REGEX.captures(content);
-	return ValidResponse {
+	ValidResponse {
 		valid: true,
 		body: Some(matches.unwrap()),
-	};
+	}
 }
 
 async fn query_playground<'a, S>(code: S) -> String
