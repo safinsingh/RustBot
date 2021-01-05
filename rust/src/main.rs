@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serenity::{
 	async_trait,
 	client::{Client, Context, EventHandler},
+	http::AttachmentType,
 	model::{
 		channel::Message, event::MessageUpdateEvent, id::MessageId,
 		prelude::Ready,
@@ -50,7 +51,7 @@ where
 	channel: &'a str,
 	mode: &'a str,
 	edition: &'a str,
-	#[serde(rename = "createType")]
+	#[serde(rename = "crateType")]
 	crate_type: &'a str,
 	tests: bool,
 	code: S,
@@ -120,18 +121,37 @@ async fn process_message<'a>(
 	let body = (&matches).as_ref().unwrap();
 	let output = extract_message_output(body).await;
 
-	if output.len() <= 500 {
-		let _ = sent
-			.edit(&ctx.http, |m| {
-				m.content(format!("```\n{}```", output))
-			})
-			.await;
-	} else {
-		let _ = sent
-			.edit(&ctx.http, |m| {
-				m.content("response too long, manually evaluate!")
-			})
-			.await;
+	match output.len() {
+		0..=1999 => {
+			let _ = sent
+				.edit(&ctx.http, |m| {
+					m.content(format!("```\n{}```", output))
+				})
+				.await;
+		}
+		2000..=7999999 => {
+			let _ = sent
+				.channel_id
+				.send_files(
+					&ctx.http,
+					vec![AttachmentType::from((
+						output.as_bytes(),
+						format!("Result-{}.txt", sent.id).as_str(),
+					))],
+					|m| m,
+				)
+				.await;
+		}
+		_ => {
+			let _ = sent
+				.edit(&ctx.http, |m| {
+					m.content(
+						"Response exceeded 8MB limit, please \
+						 manually evaluate!",
+					)
+				})
+				.await;
+		}
 	}
 }
 
@@ -169,15 +189,20 @@ impl EventHandler for Handler {
 		_new: Option<Message>,
 		event: MessageUpdateEvent,
 	) {
+		let mut bot_response = RESPONSE_MAP.lock().await;
+		let bot_message = bot_response.get_mut(&event.id);
+		if bot_message.is_none() {
+			return;
+		}
+		println!("thing.");
+
 		let content = event.content.unwrap();
 		let matches = REGEX.captures(&content);
 		if matches.is_some() {
 			return;
 		}
 
-		let mut bot_response = RESPONSE_MAP.lock().await;
-		let bot_message = bot_response.get_mut(&event.id).unwrap();
-
+		let bot_message = bot_message.unwrap();
 		let _ = bot_message
 			.edit(&ctx.http, |m| m.content("loading..."))
 			.await;
