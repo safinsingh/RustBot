@@ -7,13 +7,13 @@ use serde_json::json;
 use serenity::{
 	async_trait,
 	client::{Client, Context, EventHandler},
-	model::{channel::Message, id::MessageId, prelude::Ready},
+	model::{
+		channel::Message, event::MessageUpdateEvent, id::MessageId,
+		prelude::Ready,
+	},
 };
-use std::{
-	collections::HashMap,
-	env,
-	sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, env, sync::Arc};
+use tokio::sync::Mutex;
 
 lazy_static! {
 	static ref REGEX: Regex =
@@ -95,7 +95,9 @@ where
 	res.stderr
 }
 
-async fn extract_message_output<'a>(matches: Captures<'a>) -> String {
+async fn extract_message_output<'a>(
+	matches: &Captures<'a>,
+) -> String {
 	match &matches[1] {
 		"eval" => {
 			query_playground(format!(
@@ -106,6 +108,29 @@ async fn extract_message_output<'a>(matches: Captures<'a>) -> String {
 		}
 		"play" => query_playground(&matches[2]).await,
 		_ => unreachable!(),
+	}
+}
+
+async fn process_message<'a>(
+	matches: &ValidResponse<'a>,
+	ctx: &Context,
+	sent: &mut Message,
+) {
+	let body = (&matches.body).as_ref().unwrap();
+	let output = extract_message_output(body).await;
+
+	if output.len() <= 500 {
+		let _ = sent
+			.edit(&ctx.http, |m| {
+				m.content(format!("```\n{}```", output))
+			})
+			.await;
+	} else {
+		let _ = sent
+			.edit(&ctx.http, |m| {
+				m.content("response too long, manually evaluate!")
+			})
+			.await;
 	}
 }
 
@@ -132,25 +157,34 @@ impl EventHandler for Handler {
 			.send_message(&ctx.http, |m| m.content("loading..."))
 			.await
 			.unwrap();
-		let output =
-			extract_message_output(matches.body.unwrap()).await;
 
-		if output.len() <= 500 {
-			sent.edit(&ctx.http, |m| {
-				m.content(format!("```\n{}```", output))
-			})
-			.await
-			.unwrap();
-		} else {
-			sent.edit(&ctx.http, |m| {
-				m.content("response too long, manually evaluate!")
-			})
-			.await
-			.unwrap();
+		process_message(&matches, &ctx, &mut sent).await;
+
+		let mut map = RESPONSE_MAP.lock().await;
+		map.insert(new_message.id, sent);
+	}
+
+	async fn message_update(
+		&self,
+		ctx: Context,
+		_old_if_available: Option<Message>,
+		_new: Option<Message>,
+		event: MessageUpdateEvent,
+	) {
+		let content = event.content.unwrap().clone();
+		let matches = message_valid(&content);
+		if !matches.valid {
+			return;
 		}
 
-		let mut map = RESPONSE_MAP.lock().unwrap();
-		map.insert(new_message.id, new_message);
+		let mut bot_response = RESPONSE_MAP.lock().await;
+		let bot_message = bot_response.get_mut(&event.id).unwrap();
+
+		let _ = bot_message
+			.edit(&ctx.http, |m| m.content("loading..."))
+			.await;
+
+		process_message(&matches, &ctx, bot_message).await;
 	}
 
 	async fn ready(&self, _ctx: Context, data_about_bot: Ready) {
