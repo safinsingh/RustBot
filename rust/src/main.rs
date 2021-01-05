@@ -42,24 +42,13 @@ struct ApiResponse {
 	success: bool,
 }
 
-struct ValidResponse<'a> {
-	valid: bool,
-	body: Option<Captures<'a>>,
-}
-
-fn message_valid<'a>(content: &'a str) -> ValidResponse<'a> {
+fn message_valid<'a>(content: &'a str) -> Option<Captures<'a>> {
 	if !REGEX.is_match(content) {
-		return ValidResponse {
-			valid: false,
-			body: None,
-		};
+		return None;
 	}
 
 	let matches = REGEX.captures(content);
-	ValidResponse {
-		valid: true,
-		body: Some(matches.unwrap()),
-	}
+	Some(matches.unwrap())
 }
 
 async fn query_playground<'a, S>(code: S) -> String
@@ -112,11 +101,11 @@ async fn extract_message_output<'a>(
 }
 
 async fn process_message<'a>(
-	matches: &ValidResponse<'a>,
+	matches: &Option<Captures<'a>>,
 	ctx: &Context,
 	sent: &mut Message,
 ) {
-	let body = (&matches.body).as_ref().unwrap();
+	let body = (&matches).as_ref().unwrap();
 	let output = extract_message_output(body).await;
 
 	if output.len() <= 500 {
@@ -148,7 +137,7 @@ impl EventHandler for Handler {
 		}
 
 		let matches = message_valid(&new_message.content);
-		if !matches.valid {
+		if matches.is_none() {
 			return;
 		}
 
@@ -173,7 +162,7 @@ impl EventHandler for Handler {
 	) {
 		let content = event.content.unwrap().clone();
 		let matches = message_valid(&content);
-		if !matches.valid {
+		if matches.is_some() {
 			return;
 		}
 
