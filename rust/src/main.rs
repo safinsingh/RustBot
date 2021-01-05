@@ -3,7 +3,6 @@ use lazy_static::lazy_static;
 use regex::{Captures, Regex};
 use reqwest::Client as ReqwestClient;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use serenity::{
 	async_trait,
 	client::{Client, Context, EventHandler},
@@ -42,6 +41,35 @@ struct ApiResponse {
 	success: bool,
 }
 
+#[derive(Serialize)]
+struct ApiRequest<'a, S>
+where
+	S: Into<String>,
+{
+	channel: &'a str,
+	mode: &'a str,
+	edition: &'a str,
+	#[serde(rename = "createType")]
+	crate_type: &'a str,
+	tests: bool,
+	code: S,
+	backtrace: bool,
+}
+
+impl<'a, S: Into<String>> ApiRequest<'a, S> {
+	fn new(code: S) -> ApiRequest<'a, S> {
+		Self {
+			channel: "stable",
+			mode: "debug",
+			edition: "2018",
+			crate_type: "bin",
+			tests: false,
+			code,
+			backtrace: false,
+		}
+	}
+}
+
 fn message_valid<'a>(content: &'a str) -> Option<Captures<'a>> {
 	if !REGEX.is_match(content) {
 		return None;
@@ -56,15 +84,7 @@ where
 	S: Into<String> + Serialize,
 {
 	static ENDPOINT: &str = "https://play.integer32.com/execute";
-	let body = json!({
-		"channel": "stable",
-		"mode": "debug",
-		"edition": "2018",
-		"crateType": "bin",
-		"tests": false,
-		"code": code,
-		"backtrace": false,
-	});
+	let body = ApiRequest::new(code);
 
 	// lol
 	let res = REQWEST_CLIENT
