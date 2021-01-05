@@ -95,7 +95,7 @@ where
 		Ok(r) => r.json::<ApiResponse>().await.unwrap(),
 		Err(e) if e.is_timeout() => ApiResponse {
 			stdout: "".to_string(),
-			stderr: "Request exceeded timeout (>5s)".to_string(),
+			stderr: "Request exceeded timeout (>10s)".to_string(),
 			success: false,
 		},
 		Err(e) => panic!("{}", e),
@@ -135,17 +135,19 @@ trait MessageCtx {
 	fn get_id(&self) -> MessageId;
 }
 
-impl MessageCtx for Message {
-	fn get_channel_id(&self) -> ChannelId { self.channel_id }
+macro_rules! impl_msg_ctx {
+	($($m:ty),+) => {
+		$(
+			impl MessageCtx for $m {
+				fn get_channel_id(&self) -> ChannelId { self.channel_id }
 
-	fn get_id(&self) -> MessageId { self.id }
+				fn get_id(&self) -> MessageId { self.id }
+			}
+		)+
+	};
 }
 
-impl MessageCtx for MessageUpdateEvent {
-	fn get_channel_id(&self) -> ChannelId { self.channel_id }
-
-	fn get_id(&self) -> MessageId { self.id }
-}
+impl_msg_ctx!(Message, MessageUpdateEvent);
 
 async fn process_message<'a, M>(
 	matches: &Option<Captures<'a>>,
