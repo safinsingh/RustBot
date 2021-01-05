@@ -12,14 +12,18 @@ use serenity::{
 		prelude::Ready,
 	},
 };
-use std::{collections::HashMap, env, sync::Arc};
+use std::{collections::HashMap, env, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 lazy_static! {
 	static ref REGEX: Regex =
 		Regex::new("\\?(eval|play)\\s+```rust\\n([\\s\\S]*?)\\n+```")
 			.unwrap();
-	static ref REQWEST_CLIENT: reqwest::Client = ReqwestClient::new();
+	static ref REQWEST_CLIENT: reqwest::Client =
+		ReqwestClient::builder()
+			.timeout(Duration::from_secs(5))
+			.build()
+			.unwrap();
 	static ref RESPONSE_MAP: Arc<Mutex<HashMap<MessageId, Message>>> =
 		Arc::new(Mutex::new(HashMap::new()));
 }
@@ -84,11 +88,16 @@ where
 		.body(serde_json::to_string(&body).unwrap())
 		.header("Content-Type", "application/json")
 		.send()
-		.await
-		.unwrap()
-		.json::<ApiResponse>()
-		.await
-		.unwrap();
+		.await;
+	let res = match res {
+		Ok(r) => r.json::<ApiResponse>().await.unwrap(),
+		Err(e) if e.is_timeout() => ApiResponse {
+			stdout: "".to_string(),
+			stderr: "Request exceeded timeout (>5s)".to_string(),
+			success: false,
+		},
+		Err(e) => panic!("{}", e),
+	};
 
 	if res.success {
 		res.stdout
