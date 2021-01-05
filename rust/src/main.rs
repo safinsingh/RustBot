@@ -78,13 +78,11 @@ impl<'a, S: Into<String>> ApiRequest<'a, S> {
 	}
 }
 
-async fn query_playground<'a, S>(code: S) -> String
-where
-	S: Into<String> + Serialize,
-{
+async fn query_playground<'a>(
+	code: impl Into<String> + Serialize,
+) -> String {
 	let body = ApiRequest::new(code);
 
-	// lol
 	let res = REQWEST_CLIENT
 		.post(ENDPOINT)
 		.body(serde_json::to_string(&body).unwrap())
@@ -136,9 +134,9 @@ trait MessageCtx {
 }
 
 macro_rules! impl_msg_ctx {
-	($($m:ty),+) => {
+	($($ty:ty),+) => {
 		$(
-			impl MessageCtx for $m {
+			impl MessageCtx for $ty {
 				fn get_channel_id(&self) -> ChannelId { self.channel_id }
 				fn get_id(&self) -> MessageId { self.id }
 			}
@@ -148,15 +146,12 @@ macro_rules! impl_msg_ctx {
 
 impl_msg_ctx!(Message, MessageUpdateEvent);
 
-async fn process_message<'a, M>(
+async fn process_message<'a>(
 	matches: &Option<Captures<'a>>,
 	ctx: &Context,
-	query: &M,
+	query: &impl MessageCtx,
 	evt: BotEvent<'a>,
-) -> Option<Message>
-where
-	M: MessageCtx,
-{
+) -> Option<Message> {
 	let body = matches.as_ref().unwrap();
 	let output = extract_message_output(body).await;
 
