@@ -140,7 +140,6 @@ macro_rules! impl_msg_ctx {
 		$(
 			impl MessageCtx for $m {
 				fn get_channel_id(&self) -> ChannelId { self.channel_id }
-
 				fn get_id(&self) -> MessageId { self.id }
 			}
 		)+
