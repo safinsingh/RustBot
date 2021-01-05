@@ -70,15 +70,6 @@ impl<'a, S: Into<String>> ApiRequest<'a, S> {
 	}
 }
 
-fn message_valid<'a>(content: &'a str) -> Option<Captures<'a>> {
-	if !REGEX.is_match(content) {
-		return None;
-	}
-
-	let matches = REGEX.captures(content);
-	Some(matches.unwrap())
-}
-
 async fn query_playground<'a, S>(code: S) -> String
 where
 	S: Into<String> + Serialize,
@@ -99,9 +90,10 @@ where
 		.unwrap();
 
 	if res.success {
-		return res.stdout;
+		res.stdout
+	} else {
+		res.stderr
 	}
-	res.stderr
 }
 
 async fn extract_message_output<'a>(
@@ -156,7 +148,7 @@ impl EventHandler for Handler {
 			return;
 		}
 
-		let matches = message_valid(&new_message.content);
+		let matches = REGEX.captures(&new_message.content);
 		if matches.is_none() {
 			return;
 		}
@@ -180,8 +172,8 @@ impl EventHandler for Handler {
 		_new: Option<Message>,
 		event: MessageUpdateEvent,
 	) {
-		let content = event.content.unwrap().clone();
-		let matches = message_valid(&content);
+		let content = event.content.unwrap();
+		let matches = REGEX.captures(&content);
 		if matches.is_some() {
 			return;
 		}
