@@ -23,7 +23,8 @@ lazy_static! {
 		Arc::new(Mutex::new(HashMap::new()));
 }
 
-static HELP: &str = r#"```RustBot v0.1.0
+const ENDPOINT: &str = "https://play.integer32.com/execute";
+const HELP: &str = r#"```RustBot v0.1.0
 
 USAGE:
     ?help | ?eval | ?play { rust codeblock }
@@ -74,7 +75,6 @@ async fn query_playground<'a, S>(code: S) -> String
 where
 	S: Into<String> + Serialize,
 {
-	static ENDPOINT: &str = "https://play.integer32.com/execute";
 	let body = ApiRequest::new(code);
 
 	// lol
@@ -139,36 +139,33 @@ struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
-	async fn message(&self, ctx: Context, new_message: Message) {
-		if new_message.content.as_str() == "?help" {
-			let _ = new_message
-				.channel_id
-				.send_message(&ctx.http, |m| m.content(HELP))
-				.await;
+	async fn message(&self, ctx: Context, msg: Message) {
+		if msg.content.as_str() == "?help" {
+			let _ = msg.channel_id.say(&ctx.http, HELP).await;
 			return;
 		}
 
-		let matches = REGEX.captures(&new_message.content);
+		let matches = REGEX.captures(&msg.content);
 		if matches.is_none() {
 			return;
 		}
 
-		let mut sent = new_message
+		let mut sent = msg
 			.channel_id
-			.send_message(&ctx.http, |m| m.content("loading..."))
+			.say(&ctx.http, "loading...")
 			.await
 			.unwrap();
 
 		process_message(&matches, &ctx, &mut sent).await;
 
 		let mut map = RESPONSE_MAP.lock().await;
-		map.insert(new_message.id, sent);
+		map.insert(msg.id, sent);
 	}
 
 	async fn message_update(
 		&self,
 		ctx: Context,
-		_old_if_available: Option<Message>,
+		_old: Option<Message>,
 		_new: Option<Message>,
 		event: MessageUpdateEvent,
 	) {
