@@ -8,7 +8,9 @@ use serenity::{
 	client::{Client, Context, EventHandler},
 	http::AttachmentType,
 	model::{
-		channel::Message, event::MessageUpdateEvent, id::MessageId,
+		channel::Message,
+		event::MessageUpdateEvent,
+		id::{ChannelId, MessageId},
 		prelude::Ready,
 	},
 };
@@ -21,7 +23,7 @@ lazy_static! {
 			.unwrap();
 	static ref REQWEST_CLIENT: reqwest::Client =
 		ReqwestClient::builder()
-			.timeout(Duration::from_secs(5))
+			.timeout(Duration::from_secs(100))
 			.build()
 			.unwrap();
 	static ref RESPONSE_MAP: Arc<Mutex<HashMap<MessageId, Message>>> =
@@ -122,45 +124,85 @@ async fn extract_message_output<'a>(
 	}
 }
 
-async fn process_message<'a>(
+enum BotEvent<'a> {
+	OnMessage,
+	OnEdit(&'a mut Message),
+}
+
+trait MessageCtx {
+	fn get_channel_id(&self) -> ChannelId;
+
+	fn get_id(&self) -> MessageId;
+}
+
+impl MessageCtx for Message {
+	fn get_channel_id(&self) -> ChannelId { self.channel_id }
+
+	fn get_id(&self) -> MessageId { self.id }
+}
+
+impl MessageCtx for MessageUpdateEvent {
+	fn get_channel_id(&self) -> ChannelId { self.channel_id }
+
+	fn get_id(&self) -> MessageId { self.id }
+}
+
+async fn process_message<'a, M>(
 	matches: &Option<Captures<'a>>,
 	ctx: &Context,
-	sent: &mut Message,
-) {
-	let body = (&matches).as_ref().unwrap();
+	query: &M,
+	evt: BotEvent<'a>,
+) -> Option<Message>
+where
+	M: MessageCtx,
+{
+	let body = matches.as_ref().unwrap();
 	let output = extract_message_output(body).await;
 
 	match output.len() {
-		0..=1999 => {
-			let _ = sent
-				.edit(&ctx.http, |m| {
+		0..=1999 => match evt {
+			BotEvent::OnMessage => Some(
+				query
+					.get_channel_id()
+					.say(&ctx.http, format!("```\n{}```", output))
+					.await
+					.unwrap(),
+			),
+			BotEvent::OnEdit(old) => {
+				old.edit(&ctx.http, |m| {
 					m.content(format!("```\n{}```", output))
 				})
-				.await;
-		}
-		2000..=7999999 => {
-			let _ = sent
-				.channel_id
+				.await
+				.unwrap();
+				None
+			}
+		},
+		2000..=7999999 => Some(
+			query
+				.get_channel_id()
 				.send_files(
 					&ctx.http,
 					vec![AttachmentType::from((
 						output.as_bytes(),
-						format!("Result-{}.txt", sent.id).as_str(),
+						format!("Result-{}.txt", query.get_id())
+							.as_str(),
 					))],
 					|m| m,
 				)
-				.await;
-		}
-		_ => {
-			let _ = sent
-				.edit(&ctx.http, |m| {
-					m.content(
-						"Response exceeded 8MB limit, please \
-						 manually evaluate!",
-					)
-				})
-				.await;
-		}
+				.await
+				.unwrap(),
+		),
+		_ => Some(
+			query
+				.get_channel_id()
+				.say(
+					&ctx.http,
+					"Response exceeded 8MB limit, please manually \
+					 evaluate!",
+				)
+				.await
+				.unwrap(),
+		),
 	}
 }
 
@@ -179,16 +221,19 @@ impl EventHandler for Handler {
 			return;
 		}
 
-		let mut sent = msg
-			.channel_id
-			.say(&ctx.http, "loading...")
-			.await
-			.unwrap();
+		let typing = msg.channel_id.start_typing(&ctx.http).unwrap();
+		let response = process_message(
+			&matches,
+			&ctx,
+			&msg,
+			BotEvent::OnMessage,
+		)
+		.await;
 
-		process_message(&matches, &ctx, &mut sent).await;
+		typing.stop();
 
 		let mut map = RESPONSE_MAP.lock().await;
-		map.insert(msg.id, sent);
+		map.insert(msg.id, response.unwrap());
 	}
 
 	async fn message_update(
@@ -203,20 +248,27 @@ impl EventHandler for Handler {
 		if bot_message.is_none() {
 			return;
 		}
-		println!("thing.");
 
-		let content = event.content.unwrap();
+		let content = event.content.clone().unwrap();
 		let matches = REGEX.captures(&content);
-		if matches.is_some() {
+		if matches.is_none() {
 			return;
 		}
 
 		let bot_message = bot_message.unwrap();
-		let _ = bot_message
-			.edit(&ctx.http, |m| m.content("loading..."))
-			.await;
 
-		process_message(&matches, &ctx, bot_message).await;
+		let typing =
+			event.channel_id.start_typing(&ctx.http).unwrap();
+
+		process_message(
+			&matches,
+			&ctx,
+			&event,
+			BotEvent::OnEdit(bot_message),
+		)
+		.await;
+
+		typing.stop();
 	}
 
 	async fn ready(&self, _ctx: Context, data_about_bot: Ready) {
