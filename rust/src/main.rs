@@ -23,7 +23,7 @@ lazy_static! {
 			.unwrap();
 	static ref REQWEST_CLIENT: reqwest::Client =
 		ReqwestClient::builder()
-			.timeout(Duration::from_secs(100))
+			.timeout(Duration::from_secs(10))
 			.build()
 			.unwrap();
 	static ref RESPONSE_MAP: Arc<Mutex<HashMap<MessageId, Message>>> =
