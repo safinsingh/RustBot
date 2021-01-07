@@ -19,13 +19,11 @@ use tokio::sync::Mutex;
 
 lazy_static! {
 	static ref REGEX: Regex =
-		Regex::new("\\?(eval|play)\\s+```rust\\n([\\s\\S]*?)\\n+```")
-			.unwrap();
-	static ref REQWEST_CLIENT: reqwest::Client =
-		ReqwestClient::builder()
-			.timeout(Duration::from_secs(10))
-			.build()
-			.unwrap();
+		Regex::new("\\?(eval|play)\\s+```rust\\n([\\s\\S]*?)\\n+```").unwrap();
+	static ref REQWEST_CLIENT: reqwest::Client = ReqwestClient::builder()
+		.timeout(Duration::from_secs(10))
+		.build()
+		.unwrap();
 	static ref RESPONSE_MAP: Arc<Mutex<HashMap<MessageId, Message>>> =
 		Arc::new(Mutex::new(HashMap::new()));
 }
@@ -78,9 +76,7 @@ impl<'a, S: Into<String>> ApiRequest<'a, S> {
 	}
 }
 
-async fn query_playground<'a>(
-	code: impl Into<String> + Serialize,
-) -> String {
+async fn query_playground<'a>(code: impl Into<String> + Serialize) -> String {
 	let body = ApiRequest::new(code);
 
 	let res = REQWEST_CLIENT
@@ -89,6 +85,7 @@ async fn query_playground<'a>(
 		.header("Content-Type", "application/json")
 		.send()
 		.await;
+
 	let res = match res {
 		Ok(r) => r.json::<ApiResponse>().await.unwrap(),
 		Err(e) if e.is_timeout() => ApiResponse {
@@ -106,9 +103,7 @@ async fn query_playground<'a>(
 	}
 }
 
-async fn extract_message_output<'a>(
-	matches: &Captures<'a>,
-) -> String {
+async fn extract_message_output<'a>(matches: &Captures<'a>) -> String {
 	match &matches[1] {
 		"eval" => {
 			query_playground(format!(
@@ -165,11 +160,9 @@ async fn process_message<'a>(
 					.unwrap(),
 			),
 			BotEvent::OnEdit(old) => {
-				old.edit(&ctx.http, |m| {
-					m.content(format!("```\n{}```", output))
-				})
-				.await
-				.unwrap();
+				old.edit(&ctx.http, |m| m.content(format!("```\n{}```", output)))
+					.await
+					.unwrap();
 				None
 			}
 		},
@@ -180,8 +173,7 @@ async fn process_message<'a>(
 					&ctx.http,
 					vec![AttachmentType::from((
 						output.as_bytes(),
-						format!("Result-{}.txt", query.get_id())
-							.as_str(),
+						format!("Result-{}.txt", query.get_id()).as_str(),
 					))],
 					|m| m,
 				)
@@ -193,8 +185,7 @@ async fn process_message<'a>(
 				.get_channel_id()
 				.say(
 					&ctx.http,
-					"Response exceeded 8MB limit, please manually \
-					 evaluate!",
+					"Response exceeded 8MB limit, please manually evaluate!",
 				)
 				.await
 				.unwrap(),
@@ -218,13 +209,7 @@ impl EventHandler for Handler {
 		}
 
 		let typing = msg.channel_id.start_typing(&ctx.http).unwrap();
-		let response = process_message(
-			&matches,
-			&ctx,
-			&msg,
-			BotEvent::OnMessage,
-		)
-		.await;
+		let response = process_message(&matches, &ctx, &msg, BotEvent::OnMessage).await;
 
 		typing.stop();
 
@@ -253,16 +238,9 @@ impl EventHandler for Handler {
 
 		let bot_message = bot_message.unwrap();
 
-		let typing =
-			event.channel_id.start_typing(&ctx.http).unwrap();
+		let typing = event.channel_id.start_typing(&ctx.http).unwrap();
 
-		process_message(
-			&matches,
-			&ctx,
-			&event,
-			BotEvent::OnEdit(bot_message),
-		)
-		.await;
+		process_message(&matches, &ctx, &event, BotEvent::OnEdit(bot_message)).await;
 
 		typing.stop();
 	}
@@ -283,9 +261,6 @@ async fn main() {
 		.expect("Error creating client");
 
 	if let Err(why) = client.start().await {
-		println!(
-			"An error occurred while running the client: {:?}",
-			why
-		);
+		println!("An error occurred while running the client: {:?}", why);
 	}
 }
