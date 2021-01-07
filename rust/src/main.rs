@@ -142,13 +142,12 @@ macro_rules! impl_msg_ctx {
 impl_msg_ctx!(Message, MessageUpdateEvent);
 
 async fn process_message<'a>(
-	matches: &Option<Captures<'a>>,
+	matches: &Captures<'a>,
 	ctx: &Context,
 	query: &impl MessageCtx,
 	evt: BotEvent<'a>,
 ) -> Option<Message> {
-	let body = matches.as_ref().unwrap();
-	let output = extract_message_output(body).await;
+	let output = extract_message_output(matches).await;
 
 	match output.len() {
 		0..=1999 => match evt {
@@ -203,14 +202,13 @@ impl EventHandler for Handler {
 			return;
 		}
 
-		let matches = REGEX.captures(&msg.content);
-		if matches.is_none() {
-			return;
-		}
+		let matches = match REGEX.captures(&msg.content) {
+			Some(m) => m,
+			None => return,
+		};
 
 		let typing = msg.channel_id.start_typing(&ctx.http).unwrap();
 		let response = process_message(&matches, &ctx, &msg, BotEvent::OnMessage).await;
-
 		typing.stop();
 
 		let mut map = RESPONSE_MAP.lock().await;
@@ -225,23 +223,18 @@ impl EventHandler for Handler {
 		event: MessageUpdateEvent,
 	) {
 		let mut bot_response = RESPONSE_MAP.lock().await;
-		let bot_message = bot_response.get_mut(&event.id);
-		if bot_message.is_none() {
-			return;
-		}
+		let bot_message = match bot_response.get_mut(&event.id) {
+			Some(m) => m,
+			None => return,
+		};
 
-		let content = event.content.clone().unwrap();
-		let matches = REGEX.captures(&content);
-		if matches.is_none() {
-			return;
-		}
-
-		let bot_message = bot_message.unwrap();
+		let matches = match REGEX.captures(&event.content.as_ref().unwrap()) {
+			Some(m) => m,
+			None => return,
+		};
 
 		let typing = event.channel_id.start_typing(&ctx.http).unwrap();
-
 		process_message(&matches, &ctx, &event, BotEvent::OnEdit(bot_message)).await;
-
 		typing.stop();
 	}
 
